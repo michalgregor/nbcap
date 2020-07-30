@@ -1,0 +1,1 @@
+A package that creates a virtual display and records visual output of a piece of code using ffmpeg, optionally embedding it in the notebook: either as a whole or in chunks.

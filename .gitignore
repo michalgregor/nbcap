@@ -1,0 +1,9 @@
+/.cache/*
+/.eggs/*
+/UNKNOWN*
+/build/*
+/dist/*
+**/__pycache__/*
+*.egg-info/*
+*.pyc
+examples/output/*
