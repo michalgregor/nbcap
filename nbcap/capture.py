@@ -3,6 +3,8 @@ from IPython.display import HTML, display
 from base64 import b64encode
 from functools import wraps
 from threading import Thread
+from ipywidgets import Output
+from collections import deque
 import multiprocessing
 import subprocess
 import ctypes
@@ -11,7 +13,7 @@ import time
 import re
 import os
 
-def show_video(fname,  display_size=(288, 512), fmt='webm', verbose=True):
+def show_video(fname,  dimensions=(288, 512), fmt='webm', verbose=True):
     mp4 = open(fname,'rb').read()
     data_url = "data:video/{};base64,".format(fmt) + b64encode(mp4).decode() 
     
@@ -21,16 +23,16 @@ def show_video(fname,  display_size=(288, 512), fmt='webm', verbose=True):
       '  Your browser does not support the video tag.\n'       +
       '</video>'
     ).format(
-        width=display_size[0],
-        height=display_size[1],
+        width=dimensions[0],
+        height=dimensions[1],
         data_url=data_url,
         fmt=fmt
     )
 
     if verbose:
         print(fname, flush=True)
-        
-    display(HTML(html));
+
+    display(HTML(html))
 
 class SegmentMonitor(Thread):
     def __init__(self, fname, segment_fmt, callback, current_segment, sleep_interval=1):
@@ -139,11 +141,12 @@ class ScreenRecorder(ContextDecorator):
         self.stop()
 
 class GuiThread(Thread):
-    def __init__(self):
+    def __init__(self, max_gui_outputs=10):
         super().__init__()
         self.callback_queue = multiprocessing.JoinableQueue()
         self.sync_event = multiprocessing.Event()
         self.toStop = False
+        self.outputs = deque(maxlen=max_gui_outputs)
 
     def stop(self):
         self.toStop = True
@@ -163,7 +166,16 @@ class GuiThread(Thread):
                     else:
                         c, args, kwargs = c
                         try:
-                            c(*args, **kwargs)
+                            out = Output(layout={'border': '1px solid black'})
+                            display(out)
+                            
+                            with out:
+                                c(*args, **kwargs)
+
+                            if len(self.outputs) >= self.outputs.maxlen:
+                                self.outputs[0].close()
+
+                            self.outputs.append(out)
                             self.callback_queue.task_done()
                         except:
                             self.callback_queue.task_done()
@@ -182,7 +194,7 @@ class GuiCallbackWrapper:
         self.callback_queue = callback_queue
 
     def __call__(self, *args, **kwargs):
-        self.callback_queue.put((self.callback, args, kwargs))
+        return self.callback_queue.put((self.callback, args, kwargs))
 
 class WPExitHandler:
     def __init__(self, process, events):
@@ -308,7 +320,7 @@ class WorkerProcess:
         func.__name__ = func.__name__ + "_inner__"
         func.__qualname__ = func.__qualname__ + "_inner__"
         
-        current_module = __import__(__name__)
+        current_module = __import__('__main__')
         setattr(current_module, func.__name__, func)
         
         @wraps(func)
@@ -342,7 +354,11 @@ class ScreenCastProcess(WorkerProcess):
     def __init__(self, gui_init_func=lambda *args, **kwargs: None,
                  display_size=(288, 512), show_videos=True,
                  video_path="output", num_retries=3, arg_processor=None,
-                 segment_time=None, show_video_func=show_video):
+                 segment_time=None, show_video_func=show_video,
+                 max_gui_outputs=10):
+        """
+        show_video_func: The function used to show a video
+        """
         def initialize_func(display_size, video_path, vid_counter, callback_queue):
             # to decrement counter on a retry after a crash
             vid_counter[0] -= 1
@@ -369,7 +385,7 @@ class ScreenCastProcess(WorkerProcess):
 
             return screen_recorder
 
-        self.gui_thread = GuiThread()
+        self.gui_thread = GuiThread(max_gui_outputs=max_gui_outputs)
         self.gui_thread.start()
         self.vid_counter = multiprocessing.Array(ctypes.c_long, 1)
         self.vid_counter[0] = 1 # will be decremented back to 0 in init
