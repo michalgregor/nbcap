@@ -13,7 +13,7 @@ import time
 import re
 import os
 
-def show_video(fname,  dimensions=(288, 512), fmt='webm', verbose=True):
+def show_video(fname, dimensions=(288, 512), fmt='webm', verbose=True):
     mp4 = open(fname,'rb').read()
     data_url = "data:video/{};base64,".format(fmt) + b64encode(mp4).decode() 
     
@@ -132,7 +132,9 @@ class ScreenRecorder(ContextDecorator):
 
         if not self.video_callback is None:
             self.video_callback(self.py_fname.format(
-                self.filename_segment_py.format(self.current_segment[0])))
+                self.filename_segment_py.format(self.current_segment[0])),
+                dimensions=self.display_size
+            )
     
     def __enter__(self, *args, **kwargs):
         self.start(*args, **kwargs)
@@ -356,9 +358,6 @@ class ScreenCastProcess(WorkerProcess):
                  video_path="output", num_retries=3, arg_processor=None,
                  segment_time=None, show_video_func=show_video,
                  max_gui_outputs=10):
-        """
-        show_video_func: The function used to show a video
-        """
         def initialize_func(display_size, video_path, vid_counter, callback_queue):
             # to decrement counter on a retry after a crash
             vid_counter[0] -= 1
@@ -368,7 +367,6 @@ class ScreenCastProcess(WorkerProcess):
             import copy
             import os
             
-            display_size=(288, 512)
             DISPLAY = Display(visible=0, size=display_size)
             disp_ret = DISPLAY.start()
             os.environ["DISPLAY"] = ":{}".format(DISPLAY.display)
