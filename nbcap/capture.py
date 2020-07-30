@@ -166,7 +166,7 @@ class GuiThread(Thread):
                     else:
                         c, args, kwargs = c
                         try:
-                            out = Output(layout={'border': '1px solid black'})
+                            out = Output()
                             display(out)
                             
                             with out:
