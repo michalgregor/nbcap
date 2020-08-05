@@ -236,9 +236,10 @@ class WorkerProcess:
                       their processed version which are then ready to be passed
                       to func. 
         """
+        self.manager = multiprocessing.Manager()
         self.doneEvent = multiprocessing.Event()
-        self.function_queue = multiprocessing.Queue()
-        self.result_queue = multiprocessing.Queue()
+        self.function_queue = self.manager.Queue()
+        self.result_queue = self.manager.Queue()
         self.initialize_func = initialize_func
         self.num_retries = num_retries
         self.args = args
