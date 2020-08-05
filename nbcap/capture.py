@@ -148,6 +148,7 @@ class GuiThread(Thread):
         self.callback_queue = multiprocessing.JoinableQueue()
         self.sync_event = multiprocessing.Event()
         self.toStop = False
+        self.toClear = False
         self.outputs = deque(maxlen=max_gui_outputs)
 
     def stop(self):
@@ -155,12 +156,25 @@ class GuiThread(Thread):
         self.callback_queue.put(None)
         self.join()
 
+    def clear(self):
+        self.sync_event.clear()
+        self.toClear = True
+        self.callback_queue.put(None)
+        self.sync_event.wait()
+
     def run(self):
         try:
             while True:
                 if self.toStop: # empty the queue, the exit
                     c = self.callback_queue.get_nowait()
                     self.callback_queue.task_done()
+                elif self.toClear:
+                    try:
+                        c = self.callback_queue.get_nowait()
+                        self.callback_queue.task_done()
+                    except multiprocessing.queues.Empty:
+                        self.toClear = False
+                        self.sync_event.set()
                 else:
                     c = self.callback_queue.get()
                     if c is None:
@@ -183,7 +197,7 @@ class GuiThread(Thread):
                             self.callback_queue.task_done()
                             raise
 
-        except queue.Empty:
+        except multiprocessing.queues.Empty:
             pass
 
 class GuiCallbackWrapper:
@@ -261,24 +275,27 @@ class WorkerProcess:
             ret = func(init_ret, *args, **kwargs)
             result_queue.put(ret)
             doneEvent.set()
-            
-    def reinit(self):
-        self.process.terminate()
 
+    def _clear(self):
         # clear function_queue
         try:
             while True:
                 self.function_queue.get_nowait()
         except multiprocessing.queues.Empty:
             pass
-        
+
         # clear result_queue
         try:
             while True:
                 self.result_queue.get_nowait()
         except multiprocessing.queues.Empty:
             pass
-                    
+
+    def reinit(self):
+        if not self.process is None and self.process.is_alive():
+            self.process.terminate()
+        
+        self._clear()
         self.doneEvent.clear()
         self.process = self.create_process()
         self.start()
@@ -287,13 +304,14 @@ class WorkerProcess:
         """
         Runs the specified function in the process.
         """
+
         # reinitialize the process if it died
         if not self.process.is_alive():
             self.reinit()
 
         if not self.arg_processor is None:
             args, kwargs = self.arg_processor(args, kwargs)
-        
+
         for i in range(self.num_retries+1):
             if i > 0:
                 print("Execution crashed. Retrying {}/{}...".format(i,
@@ -302,11 +320,11 @@ class WorkerProcess:
             self.doneEvent.clear()
             self.function_queue.put((func, args, kwargs))
             self.doneEvent.wait()
-            
+
             try:
                 res = self.result_queue.get_nowait()
                 return res
-            except:
+            except multiprocessing.queues.Empty:
                 self.reinit()
                 
         raise RuntimeError("Execution crashed on all {} tries.".format(
@@ -342,7 +360,9 @@ class ScreenRecordWrapper:
     def __init__(self, func):
         self.func = func
         
-    def __call__(self, screen_recorder, *args, **kwargs):
+    def __call__(self, init_ret, *args, **kwargs):
+        screen_recorder = init_ret
+
         with screen_recorder:
             ret = self.func(*args, **kwargs)
         
@@ -362,7 +382,6 @@ class ScreenCastProcess(WorkerProcess):
             # to decrement counter on a retry after a crash
             vid_counter[0] -= 1
             
-            global screen_recorder
             from pyvirtualdisplay import Display
             import copy
             import os
@@ -396,10 +415,16 @@ class ScreenCastProcess(WorkerProcess):
                          num_retries=num_retries,
                          arg_processor=arg_processor)
 
+    def _clear(self):
+        super()._clear()
+        # clear gui thread
+        self.gui_thread.clear()
+
     def run_func(self, func, *args, **kwargs):
         ret = super().run_func(ScreenRecordWrapper(func), *args, **kwargs)
         self.gui_thread.callback_queue.join()
         return ret
 
     def __del__(self):
-        self.gui_thread.stop()
+        if hasattr(self, 'gui_thread'):
+            self.gui_thread.stop()
