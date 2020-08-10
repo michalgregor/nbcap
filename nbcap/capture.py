@@ -118,7 +118,7 @@ class ScreenRecorder(ContextDecorator):
                '-bufsize 100k -an {} {}'
         ).format(
             self.display_size[0], self.display_size[1],
-            self.display.display, self.segment_cmd, self.fname
+            self.display, self.segment_cmd, self.fname
         )
         
         self.ffmpegHandle=subprocess.Popen(cmd, stdin=subprocess.PIPE, shell=True)
@@ -336,21 +336,21 @@ class WorkerProcess:
         When called on a function, returns a decorated version that
         uses run_func internally.
         """
-        orig_name = func.__name__
-        orig_qualname = func.__qualname__
-        func.__name__ = func.__name__ + "_inner__"
-        func.__qualname__ = func.__qualname__ + "_inner__"
+        # orig_name = func.__name__
+        # orig_qualname = func.__qualname__
+        # func.__name__ = func.__name__ + "_inner__"
+        # func.__qualname__ = func.__qualname__ + "_inner__"
         
-        current_module = __import__('__main__')
-        setattr(current_module, func.__name__, func)
+        # current_module = __import__('__main__')
+        # setattr(current_module, func.__name__, func)
         
         @wraps(func)
         def wrapper(*args, **kwargs):
             return self.run_func(func, *args, **kwargs)
 
-        wrapper.__name__ = orig_name
-        wrapper.__qualname__ = orig_qualname
-        setattr(current_module, wrapper.__name__, wrapper)
+        # wrapper.__name__ = orig_name
+        # wrapper.__qualname__ = orig_qualname
+        # setattr(current_module, wrapper.__name__, wrapper)
         
         if not self.process.is_alive():
             self.start()
@@ -392,7 +392,7 @@ class ScreenCastProcess(WorkerProcess):
             os.environ["DISPLAY"] = ":{}".format(DISPLAY.display)
 
             screen_recorder = ScreenRecorder(
-            DISPLAY, display_size, video_path, 
+            DISPLAY.display, display_size, video_path, 
             segment_time=segment_time,
             video_callback=GuiCallbackWrapper(show_video_func, callback_queue)
                               if show_videos else None,
