@@ -142,14 +142,43 @@ class ScreenRecorder(ContextDecorator):
     def __exit__(self, *exc):
         self.stop()
 
+class OutputWrapper:
+    def __init__(self, callback, outputs):
+        self.callback = callback
+        self.outputs = outputs
+    
+    def __call__(self, *args, **kwargs):
+        ret = None
+        out = Output()
+        display(out)
+        
+        with out:
+            ret = self.callback(*args, **kwargs)
+
+        if len(self.outputs) >= self.outputs.maxlen:
+            self.outputs[0].close()
+
+        self.outputs.append(out)
+        
+        return ret
+
+class OutputManager:
+    def __init__(self, *args, max_gui_outputs=10, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.outputs = deque(maxlen=max_gui_outputs)
+
+    def __call__(self, callback):
+        return OutputWrapper(callback, self.outputs, *self.args, **self.kwargs)
+
 class GuiThread(Thread):
-    def __init__(self, max_gui_outputs=10):
+    def __init__(self, output_manager=None):
         super().__init__()
+        self.output_manager = output_manager
         self.callback_queue = multiprocessing.JoinableQueue()
         self.sync_event = multiprocessing.Event()
         self.toStop = False
         self.toClear = False
-        self.outputs = deque(maxlen=max_gui_outputs)
 
     def stop(self):
         self.toStop = True
@@ -181,17 +210,10 @@ class GuiThread(Thread):
                         self.callback_queue.task_done()
                     else:
                         c, args, kwargs = c
+                        if not self.output_manager is None:
+                            c = self.output_manager(c)
                         try:
-                            out = Output()
-                            display(out)
-                            
-                            with out:
-                                c(*args, **kwargs)
-
-                            if len(self.outputs) >= self.outputs.maxlen:
-                                self.outputs[0].close()
-
-                            self.outputs.append(out)
+                            c(*args, **kwargs)
                             self.callback_queue.task_done()
                         except:
                             self.callback_queue.task_done()
@@ -378,7 +400,7 @@ class ScreenCastProcess(WorkerProcess):
                  display_size=(288, 512), show_videos=True,
                  video_path="output", num_retries=3, arg_processor=None,
                  segment_time=None, show_video_func=show_video,
-                 max_gui_outputs=10):
+                 output_manager="default"):
         def initialize_func(display_size, video_path, vid_counter, callback_queue):
             # to decrement counter on a retry after a crash
             vid_counter[0] -= 1
@@ -403,7 +425,10 @@ class ScreenCastProcess(WorkerProcess):
 
             return screen_recorder
 
-        self.gui_thread = GuiThread(max_gui_outputs=max_gui_outputs)
+        if isinstance(output_manager, str) and output_manager == "default":
+            output_manager = OutputManager()
+
+        self.gui_thread = GuiThread(output_manager=output_manager)
         self.gui_thread.start()
         self.vid_counter = multiprocessing.Array(ctypes.c_long, 1)
         self.vid_counter[0] = 1 # will be decremented back to 0 in init
