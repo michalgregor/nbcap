@@ -13,7 +13,7 @@ import time
 import re
 import os
 
-def show_video(fname, dimensions=(288, 512), fmt='webm', verbose=True):
+def show_video(fname, dimensions=(800, 600), fmt='webm', verbose=True):
     mp4 = open(fname,'rb').read()
     data_url = "data:video/{};base64,".format(fmt) + b64encode(mp4).decode() 
     
@@ -33,6 +33,16 @@ def show_video(fname, dimensions=(288, 512), fmt='webm', verbose=True):
         print(fname, flush=True)
 
     display(HTML(html))
+
+class ShowVideoCallback:
+    def __init__(self, dimensions, fmt='webm', verbose=True):
+        self.dimensions = dimensions
+        self.fmt = fmt
+        self.verbose = verbose
+    
+    def __call__(self, fname):
+        return show_video(fname, dimensions=self.dimensions,
+                          fmt=self.fmt, verbose=self.verbose)
 
 class SegmentMonitor(Thread):
     def __init__(self, fname, segment_fmt, callback, current_segment, sleep_interval=1):
@@ -132,9 +142,7 @@ class ScreenRecorder(ContextDecorator):
 
         if not self.video_callback is None:
             self.video_callback(self.py_fname.format(
-                self.filename_segment_py.format(self.current_segment[0])),
-                dimensions=self.display_size
-            )
+                self.filename_segment_py.format(self.current_segment[0])))
     
     def __enter__(self, *args, **kwargs):
         self.start(*args, **kwargs)
