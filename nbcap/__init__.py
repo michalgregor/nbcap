@@ -3,4 +3,5 @@
 VERSION = "0.1"
 
 from .capture import show_video
-from .capture import WorkerProcess, ScreenCastProcess, ScreenRecorder, OutputManager
+from .capture import (WorkerProcess, ScreenCastProcess,
+                      ScreenRecorder, OutputManager, DisplayProcess)

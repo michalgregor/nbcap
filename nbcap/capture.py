@@ -391,6 +391,39 @@ class ScreenRecordWrapper:
         
         return ret
 
+class DisplayProcess:
+    def __init__(self, display_size):
+        self.display_size = display_size       
+        self.queue = multiprocessing.Queue()
+        self.stop_event = multiprocessing.Event()
+        self.process = multiprocessing.Process(
+            target=self._run, args=(display_size, self.queue, self.stop_event)
+        )
+        
+        self.process.start()
+        self.id = self.queue.get()        
+        os.environ["DISPLAY"] = ":{}".format(self.id)
+
+    @staticmethod
+    def _run(display_size, queue, stop_event):
+        import pyvirtualdisplay
+        import os
+        os.setpgrp()
+
+        pydisp = pyvirtualdisplay.Display(visible=0, size=display_size)
+        display = pydisp.start().display
+        queue.put(display)
+        stop_event.wait()
+        pydisp.stop()
+        queue.put(None)
+
+    def stop(self):
+        self.stop_event.set()
+        self.queue.get()
+
+    def __del__(self):
+        self.stop()
+
 class ScreenCastProcess(WorkerProcess):
     """
     A WorkerProcess that will additionally create a virtual
@@ -414,11 +447,12 @@ class ScreenCastProcess(WorkerProcess):
             os.environ["DISPLAY"] = ":{}".format(DISPLAY.display)
 
             screen_recorder = ScreenRecorder(
-            DISPLAY.display, display_size, video_path, 
-            segment_time=segment_time,
-            video_callback=GuiCallbackWrapper(show_video_func, callback_queue)
-                              if show_videos else None,
-            vid_counter=vid_counter)
+                DISPLAY.display, display_size, video_path, 
+                segment_time=segment_time,
+                video_callback=GuiCallbackWrapper(show_video_func, callback_queue)
+                        if show_videos else None,
+                vid_counter=vid_counter
+            )
 
             gui_init_func(display_size, video_path, vid_counter,
                           callback_queue, screen_recorder)
