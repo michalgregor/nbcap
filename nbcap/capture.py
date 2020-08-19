@@ -13,7 +13,8 @@ import time
 import re
 import os
 
-def show_video(fname, dimensions=(800, 600), fmt='webm', verbose=True):
+def show_video(fname, dimensions=(800, 600), fmt='webm',
+               verbose=True, remove_after=True):
     mp4 = open(fname,'rb').read()
     data_url = "data:video/{};base64,".format(fmt) + b64encode(mp4).decode() 
     
@@ -33,16 +34,19 @@ def show_video(fname, dimensions=(800, 600), fmt='webm', verbose=True):
         print(fname, flush=True)
 
     display(HTML(html))
+    os.remove(fname)
 
 class ShowVideoCallback:
-    def __init__(self, dimensions, fmt='webm', verbose=True):
+    def __init__(self, dimensions, fmt='webm', verbose=True, remove_after=True):
         self.dimensions = dimensions
         self.fmt = fmt
         self.verbose = verbose
+        self.remove_after = remove_after
     
     def __call__(self, fname):
         return show_video(fname, dimensions=self.dimensions,
-                          fmt=self.fmt, verbose=self.verbose)
+                          fmt=self.fmt, verbose=self.verbose,
+                          remove_after=self.remove_after)
 
 class SegmentMonitor(Thread):
     def __init__(self, fname, segment_fmt, callback, current_segment, sleep_interval=1):
