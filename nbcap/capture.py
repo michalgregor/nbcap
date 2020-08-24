@@ -34,7 +34,8 @@ def show_video(fname, dimensions=(800, 600), fmt='webm',
         print(fname, flush=True)
 
     display(HTML(html))
-    os.remove(fname)
+    if remove_after:
+        os.remove(fname)
 
 class ShowVideoCallback:
     def __init__(self, dimensions, fmt='webm', verbose=True, remove_after=True):
